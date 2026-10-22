@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Thiết diện hình chóp S.ABCD</title>
+<style>
+:root{--bg:#f7f6f2;--fg:#1f1f1c;--mut:#666;--card:#fff;--bd:#d8d6cf;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1b19;--fg:#ecebe6;--mut:#a09f98;--card:#262624;--bd:#3c3c38}}
+:root[data-theme="dark"]{--bg:#1b1b19;--fg:#ecebe6;--mut:#a09f98;--card:#262624;--bd:#3c3c38}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column}
+header{padding:10px 14px;border-bottom:1px solid var(--bd)}
+h1{font-size:16px;margin:0 0 2px}
+header p{margin:0;font-size:12.5px;color:var(--mut)}
+#wrap{position:relative;flex:1;min-height:0;touch-action:none;overflow:hidden}
+canvas{display:block;width:100%;height:100%}
+.lb{position:absolute;font-size:15px;font-weight:600;pointer-events:none;transform:translate(-50%,-120%);text-shadow:0 0 3px var(--bg),0 0 3px var(--bg)}
+#ctl{padding:10px 14px;border-top:1px solid var(--bd);display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center;font-size:13px;background:var(--card)}
+#ctl label{display:flex;align-items:center;gap:6px}
+.lg{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--mut)}
+.lg i{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:4px}
+</style></head><body>
+<header><h1>Thiết diện EFMNG của hình chóp S.ABCD</h1>
+<p>Kéo để xoay · cuộn/chụm để phóng to · kéo thanh trượt để dời điểm E trên SA</p></header>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div id="ctl">
+<label>E trên SA: <input id="t" type="range" min="0.15" max="0.85" step="0.01" value="0.5"></label>
+<label><input id="sec" type="checkbox" checked> Thiết diện</label>
+<label><input id="aux" type="checkbox" checked> Đường phụ EP, EQ, d</label>
+<div class="lg"><span><i style="background:#555"></i>nét liền: thấy</span><span><i style="background:repeating-linear-gradient(90deg,#555 0 4px,transparent 4px 7px)"></i>nét đứt: khuất</span><span><i style="background:#d9480f"></i>thiết diện</span><span><i style="background:#1c7ed6"></i>đường d</span><span><i style="background:#7048e8"></i>EP, EQ</span></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const V=(x,y,z)=>new THREE.Vector3(x,y,z);
+// Toạ độ: đáy nằm trong mặt phẳng y=0, trục đứng là y
+const A=V(-2,0,-2),B=V(2,0,-2),C=V(2,0,2),D=V(-2,0,2),S=V(0,5,0);
+const M=V(2,0,1),N=V(1,0,2),P=V(5,0,-2),Q=V(-2,0,5);
+function inter(p1,p2,p3,p4){ // giao 2 đường thẳng (p1p2) và (p3p4) trong cùng mặt phẳng
+  const d1=p2.clone().sub(p1),d2=p4.clone().sub(p3),w=p1.clone().sub(p3);
+  const a=d1.dot(d1),b=d1.dot(d2),c=d2.dot(d2),d=d1.dot(w),e=d2.dot(w);
+  const s=(b*e-c*d)/(a*c-b*b);
+  return p1.clone().add(d1.multiplyScalar(s));
+}
+const wrap=document.getElementById('wrap'),cv=document.getElementById('c');
+const R=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+R.setPixelRatio(Math.min(Math.max(devicePixelRatio,2),3));
+const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(40,1,0.1,100);
+const root=new THREE.Group();scene.add(root);root.position.y=-1.5;
+const dyn=new THREE.Group();root.add(dyn);
+const UG=new THREE.CylinderGeometry(1,1,1,8);
+const mats={};const mat=c=>mats[c]||(mats[c]=new THREE.MeshBasicMaterial({color:c}));
+function cyl(a,b,c,w,g){const d=b.clone().sub(a),L=d.length(),m=new THREE.Mesh(UG,mat(c));m.scale.set(w,L,w);m.position.copy(a).add(b).multiplyScalar(.5);m.quaternion.setFromUnitVectors(V(0,1,0),d.normalize());g.add(m);}
+function seg(a,b,c,w,faces,parent){
+  const solid=new THREE.Group(),dash=new THREE.Group();
+  cyl(a,b,c,w,solid);
+  const d=b.clone().sub(a),L=d.length(),u=d.clone().normalize(),dl=.16,gp=.11;
+  for(let t=0;t<L;t+=dl+gp){const e=Math.min(t+dl,L);cyl(a.clone().addScaledVector(u,t),a.clone().addScaledVector(u,e),c,w*.9,dash);}
+  parent.add(solid,dash);items.push({solid,dash,faces,parent});
+}
+let items=[];
+const faceV={base:[A,B,C,D],SAB:[S,A,B],SBC:[S,B,C],SCD:[S,C,D],SDA:[S,D,A]};
+const cen=V(0,1.2,0);
+const faceN={};
+for(const k in faceV){const f=faceV[k],c=f.reduce((p,q)=>p.add(q),V(0,0,0)).divideScalar(f.length);
+  const n=f[1].clone().sub(f[0]).cross(f[2].clone().sub(f[0])).normalize();if(n.dot(c.clone().sub(cen))<0)n.negate();faceN[k]={n,c};}
+const W=.028;
+const E_=[['A','B','base','SAB'],['B','C','base','SBC'],['C','D','base','SCD'],['D','A','base','SDA'],['S','A','SAB','SDA'],['S','B','SAB','SBC'],['S','C','SBC','SCD'],['S','D','SCD','SDA']];
+const pts={A,B,C,D,S,M,N,P,Q};
+E_.forEach(e=>seg(pts[e[0]],pts[e[1]],0x444444,W,[e[2],e[3]],root));
+seg(B,P,0x999999,.018,['always'],root);seg(D,Q,0x999999,.018,['always'],root);
+seg(P,M,0x1c7ed6,.035,['always'],root);seg(N,Q,0x1c7ed6,.035,['always'],root);seg(M,N,0x1c7ed6,.035,['base'],root);
+const base=new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([A,B,C,A,C,D]),new THREE.MeshBasicMaterial({color:0x8899aa,transparent:true,opacity:.12,side:THREE.DoubleSide,depthWrite:false}));
+root.add(base);
+const labels={};
+function addLabel(n){const d=document.createElement('div');d.className='lb';d.textContent=n;wrap.appendChild(d);labels[n]=d;}
+Object.keys(pts).forEach(addLabel);['E','F','G'].forEach(addLabel);
+const dots={};
+function dot(n,col){const m=new THREE.Mesh(new THREE.SphereGeometry(.09,20,20),new THREE.MeshBasicMaterial({color:col}));root.add(m);dots[n]=m;}
+Object.keys(pts).forEach(n=>dot(n,0x333333));
+['E','F','G'].forEach(n=>dot(n,0xd9480f));
+['M','N'].forEach(n=>dots[n].material.color.set(0xd9480f));
+let secMesh;
+function build(){
+  const t=+document.getElementById('t').value;
+  const E=A.clone().lerp(S,t);
+  const F=inter(E,P,S,B),G=inter(E,Q,S,D);
+  pts.E=E;pts.F=F;pts.G=G;
+  Object.keys(pts).forEach(n=>{if(dots[n])dots[n].position.copy(pts[n]);});
+  items=items.filter(i=>{if(i.parent===dyn){return false;}return true;});
+  dyn.clear();
+  const sec=new THREE.Group(),ax=new THREE.Group();sec.name='sec';ax.name='aux';dyn.add(sec,ax);
+  const poly=[E,F,M,N,G];
+  secMesh=new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([E,F,M,E,M,N,E,N,G]),new THREE.MeshBasicMaterial({color:0xd9480f,transparent:true,opacity:.35,side:THREE.DoubleSide,depthWrite:false}));
+  sec.add(secMesh);
+  const fc=['SAB','SBC','base','SCD','SDA'];
+  for(let i=0;i<5;i++)segIn(poly[i],poly[(i+1)%5],0xd9480f,.04,[fc[i]],sec);
+  segIn(E,P,0x7048e8,.025,['SAB'],ax);segIn(E,Q,0x7048e8,.025,['SDA'],ax);
+  sec.visible=document.getElementById('sec').checked;ax.visible=document.getElementById('aux').checked;
+}
+function segIn(a,b,c,w,f,g){const n=items.length;seg(a,b,c,w,f,g);items[items.length-1].parent=dyn;}
+build();
+document.getElementById('t').oninput=build;
+document.getElementById('sec').onchange=e=>{dyn.getObjectByName('sec').visible=e.target.checked};
+document.getElementById('aux').onchange=e=>{dyn.getObjectByName('aux').visible=e.target.checked};
+// Điều khiển camera
+let th=0.9,ph=0.95,dist=17;
+const ptr=new Map();let pd=0;
+wrap.addEventListener('pointerdown',e=>{wrap.setPointerCapture(e.pointerId);ptr.set(e.pointerId,e);});
+wrap.addEventListener('pointermove',e=>{
+  if(!ptr.has(e.pointerId))return;
+  const o=ptr.get(e.pointerId);
+  if(ptr.size===1){th-=(e.clientX-o.clientX)*.008;ph=Math.min(1.5,Math.max(.1,ph-(e.clientY-o.clientY)*.008));}
+  ptr.set(e.pointerId,e);
+  if(ptr.size===2){const [a,b]=[...ptr.values()];const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);if(pd)dist=Math.min(40,Math.max(6,dist*pd/d));pd=d;}
+});
+const up=e=>{ptr.delete(e.pointerId);pd=0};
+wrap.addEventListener('pointerup',up);wrap.addEventListener('pointercancel',up);
+wrap.addEventListener('wheel',e=>{e.preventDefault();dist=Math.min(40,Math.max(6,dist*(1+e.deltaY*.001)))},{passive:false});
+function frame(){
+  const w=wrap.clientWidth,h=wrap.clientHeight;
+  if(cv.width!==Math.floor(w*R.getPixelRatio())){R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();}
+  cam.position.set(dist*Math.sin(ph)*Math.sin(th),dist*Math.cos(ph),dist*Math.sin(ph)*Math.cos(th));
+  cam.lookAt(0,0,0);cam.updateMatrixWorld();
+  const cl=cam.position.clone().sub(root.position),fr={always:true};
+  for(const k in faceN)fr[k]=faceN[k].n.dot(cl.clone().sub(faceN[k].c))>0;
+  items.forEach(i=>{const v=i.faces.some(f=>fr[f]);i.solid.visible=v;i.dash.visible=!v;});
+  R.render(scene,cam);
+  for(const n in labels){
+    const p=pts[n].clone().add(root.position).project(cam);
+    labels[n].style.left=((p.x+1)/2*w)+'px';labels[n].style.top=((1-p.y)/2*h)+'px';
+    labels[n].style.color=['E','F','G','M','N'].includes(n)?'#d9480f':'var(--fg)';
+  }
+  requestAnimationFrame(frame);
+}
+frame();
+</script></body></html>
